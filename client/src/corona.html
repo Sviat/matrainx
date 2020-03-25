@@ -1,0 +1,44 @@
+<html>
+<head>
+    <script src="../dependency/jquery.min.js" type="text/javascript"></script>
+    <script src="../dependency/js.cookie.min.js" type="text/javascript"></script>
+    <script src="../dependency/NumberFormat154.js" type="text/javascript"></script>
+    <script src="corona.js" type="text/javascript"></script>
+    <link rel="stylesheet" type="text/css" href="counter.css"></link>
+    <meta charset="utf-8" />
+    <title>Matrix Has Virus</title>
+</head>
+<body>
+    <script>
+        $(document).ready( () => {
+            startFetcher();
+        });
+    </script>
+    <div id="divCounter">
+        <div class="counter">
+            <span>&#129332;:<span class="confirmed"></span></span>
+        </div>
+        <div class="diff">
+            +<span id="confirmedDiff">0</span>
+        </div>
+        <div class="counter">
+            <span>&#128128;:<span class="dead"></span></span>
+        </div>
+        <div class="diff">
+            +<span id="deadDiff">0</span>
+        </div>
+        <div class="counter">
+            <span>&#129395;:<span class="recovered"></span></span>
+        </div>
+        <div class="diff">
+            +<span id="recoveredDiff">0</span>
+        </div>
+        <div class="counter">
+            <span>&#9203;:<span class="active"></span></span>
+        </div>
+        <div class="diff">
+            +<span id="activeDiff">0</span>
+        </div>
+    </div>
+</body>
+</html>
