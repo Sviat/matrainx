@@ -12,29 +12,9 @@ var context = undefined;
 var screen = window.screen;
 var currentDrawer = undefined;
 
-var symbolsCache = new Array(128);
-function addSymbolToCache(element) {
-    symbolsCache.pop();
-    symbolsCache.unshift(element);
-};
-
-function readCoronaStatsFromCookies() {
-    try {
-        return JSON.parse(Cookies.get(COOKIE_NAME_LATEST));
-    } catch(e) {
-        console.error(document.cookie);
-        return {
-            confirmed: 440392,
-            dead: 19769,
-            recovered: 111460,
-            active: 309163
-        }
-    };
-}
-
-class RainDrawer extends Object {
+class RainDrawer {
     constructor(drawingContext, view) {
-        super();
+        this.dataCache = window.localStorage; // Requires CEF flag: --disable-domain-blocking-for-3d-apis
         this.frequency = DRAWING_FREQUENCY;
         this.raindropSize = RAINDROP_SIZE;
 
@@ -43,6 +23,20 @@ class RainDrawer extends Object {
         this.height = view.height;
         this.timestampLastDraw = 0;
         this.animationFrame = undefined;
+    }
+
+    readCoronaStatsFromCache() {
+        try {
+            return JSON.parse(this.dataCache.getItem(COOKIE_NAME_LATEST));
+        } catch(e) {
+            console.error(e);
+            return {
+                confirmed: 440392,
+                dead: 19769,
+                recovered: 111460,
+                active: 309163
+            }
+        };
     }
 
     draw(timestamp) {
@@ -88,7 +82,6 @@ class RainDrawer extends Object {
             }
         }
         code = Math.trunc(code);
-        addSymbolToCache(code);
         // return String.fromCharCode(code);
         return String.fromCodePoint(code);
     }
@@ -188,7 +181,7 @@ class CoronaRainDrawer extends RandomRainDrawer {
         }
     }
 
-    getStats() { return readCoronaStatsFromCookies(); }
+    getStats() { return this.readCoronaStatsFromCache(); }
     getConfirmed() { return this.getStats().confirmed; }
     getDead() { return this.getStats().dead; }
     getRecovered() { return this.getStats().recovered; }

@@ -40,6 +40,7 @@ class CoronaStats {
 
 class CoronaSource {
     constructor() {
+        this.cache = window.localStorage; // Requires CEF flag: --disable-domain-blocking-for-3d-apis
         this.current = new CoronaStats();
         this.previous = new CoronaStats();
         this.lastDiff = new CoronaStats();
@@ -50,7 +51,7 @@ class CoronaSource {
     }
 
     clearDiff() {
-        this.setCookies();
+        this.cacheStats();
         this.lastDiff = new CoronaStats();
     }
 
@@ -62,11 +63,16 @@ class CoronaSource {
     update(renderCb = undefined) {
     }
 
-    setCookies() {
-        let statsExport = { ...this.current,
+    cacheStats() {
+        let statsExport = {
+            ...this.current,
             active: this.current.getActive()
         };
-        Cookies.set(COOKIE_NAME_LATEST, JSON.stringify(statsExport), { expires: 1 });
+        try {
+            this.cache.setItem(COOKIE_NAME_LATEST, JSON.stringify(statsExport));
+        } catch (e) {
+            console.error(e);
+        }
     }
 }
 
@@ -141,7 +147,7 @@ class ArcgisCoronaSource extends CoronaSource {
     update(renderCb = undefined) {
         function updateAndRenderCallback() {
             this.updateDiff();
-            this.setCookies();
+            this.cacheStats();
             if( renderCb ) {
                 renderCb(this.current, this.lastDiff);
             }
@@ -193,7 +199,7 @@ class GitHubCoronaTrackerApiSource extends CoronaSource {
     update(renderCb = undefined) {
         function updateCb(stats) {
             this._updateStats(stats);
-            this.setCookies();
+            this.cacheStats();
             if (renderCb) {
                 renderCb(this.current, this.lastDiff);
             }
