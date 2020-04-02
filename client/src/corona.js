@@ -90,10 +90,19 @@ class ArcgisCoronaSource extends CoronaSource {
 
     _requestValue(url, callback) {
         $.getJSON(url).done(function (data) {
+            function responseHasValue(response) {
+                return response && response.features
+                    && response.features[0].attributes
+                    && response.features[0].attributes.value;
+            }
+            function responseGetValue(response) {
+                return response.features[0].attributes.value;
+            }
+
             let value = 0;
             try {
-                if (data && data.features && data.features[0].attributes && data.features[0].attributes.value) {
-                    value = parseInt(data.features[0].attributes.value);
+                if( responseHasValue(data) ) {
+                    value = parseInt( responseGetValue(data) );
                 }
             } catch (e) {
                 console.error(e);
@@ -101,47 +110,44 @@ class ArcgisCoronaSource extends CoronaSource {
             callback(value);
         }).fail(function (jqxhr, textStatus, error) {
             var err = textStatus + ", " + error;
-            console.log("Request Failed: " + err);
+            console.error(`Request Failed: ${err}`);
         });
     }
 
     _updateConfirmed(callback) {
         this.previous.confirmed = this.current.confirmed;
-        function setter(value) {
+        this._requestValue(this.endpoint.confirmed, (value) => {
             if( value ) {
                 this.current.confirmed = value;
                 if( callback ) {
                     callback();
                 }
             }
-        }
-        this._requestValue(this.endpoint.confirmed, setter.bind(this));
+        });
     }
 
     _updateDead(callback) {
         this.previous.dead = this.current.dead;
-        function setter(value) {
+        this._requestValue(this.endpoint.dead, (value) => {
             if( value ) {
                 this.current.dead = value;
                 if( callback ) {
                     callback();
                 }
             }
-        }
-        this._requestValue(this.endpoint.dead, setter.bind(this));
+        });
     }
 
     _updateRecovered(callback) {
         this.previous.recovered = this.current.recovered;
-        function setter(value) {
+        this._requestValue(this.endpoint.recovered, (value) => {
             if( value ) {
                 this.current.recovered = value;
                 if( callback ) {
                     callback();
                 }
             }
-        }
-        this._requestValue(this.endpoint.recovered, setter.bind(this));
+        });
     }
 
     update(renderCb = undefined) {
@@ -185,7 +191,7 @@ class GitHubCoronaTrackerApiSource extends CoronaSource {
             callback(stats);
         }).fail(function (jqxhr, textStatus, error) {
             var err = textStatus + ", " + error;
-            console.log("Request Failed: " + err);
+            console.error("Request Failed: " + err);
         });
     }
 

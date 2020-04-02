@@ -12,6 +12,24 @@ var context = undefined;
 var screen = window.screen;
 var currentDrawer = undefined;
 
+class CoronaStatsExported {
+    constructor(exportString) {
+        let temp = JSON.parse(exportString);
+        try {
+            this.confirmed = temp.confirmed;
+            this.dead = temp.dead;
+            this.recovered = temp.recovered;
+            this.active = temp.active;
+        } catch(e) {
+            console.error(e);
+            this.confirmed = 440392;
+            this.dead = 19769;
+            this.recovered = 111460;
+            this.active = 309163;
+        };
+    }
+}
+
 class RainDrawer {
     constructor(drawingContext, view) {
         this.dataCache = window.localStorage; // Requires CEF flag: --disable-domain-blocking-for-3d-apis
@@ -26,17 +44,7 @@ class RainDrawer {
     }
 
     readCoronaStatsFromCache() {
-        try {
-            return JSON.parse(this.dataCache.getItem(COOKIE_NAME_LATEST));
-        } catch(e) {
-            console.error(e);
-            return {
-                confirmed: 440392,
-                dead: 19769,
-                recovered: 111460,
-                active: 309163
-            }
-        };
+        return new CoronaStatsExported(this.dataCache.getItem(COOKIE_NAME_LATEST));
     }
 
     draw(timestamp) {
@@ -164,6 +172,10 @@ class CoronaRainDrawer extends RandomRainDrawer {
         super(drawingContext, view);
         this.factor = factor;
         this.yPositions = Array( Math.round( this.width / (this.raindropSize - 2) ) ).fill(0);
+
+        this.progress = {
+
+        };
     }
 
     generateRaindrop() {
