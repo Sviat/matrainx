@@ -79,7 +79,7 @@ class CoronaSource {
 
     cacheStats() {
         try {
-            this.cache.setItem( COOKIE_NAME_LATEST, statsExport.serialize() );
+            this.cache.setItem( COOKIE_NAME_LATEST, this.current.serialize() );
         } catch (e) {
             console.error(e);
         }
