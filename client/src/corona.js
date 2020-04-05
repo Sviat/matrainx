@@ -1,16 +1,18 @@
 "use strict";
 
 const COOKIE_NAME_LATEST = "coronaStatsLatest";
+const COOKIE_NAME_DIFF = "coronaStatsDiff";
 
 var INTERVAL = undefined;
 var SOURCE = undefined;
 var VIEW = undefined;
 
 class CoronaStats {
-    constructor(confirmed = 0, dead = 0, recovered = 0) {
+    constructor(confirmed = 0, dead = 0, recovered = 0, timestamp = 0) {
         this.confirmed = confirmed;
         this.dead = dead;
         this.recovered = recovered;
+        this.timestamp = timestamp || Date.now();
     }
 
     getActive() {
@@ -26,7 +28,8 @@ class CoronaStats {
         return new CoronaStats(
             (this.confirmed - otherStats.confirmed),
             (this.dead - otherStats.dead),
-            (this.recovered - otherStats.recovered)
+            (this.recovered - otherStats.recovered),
+            (this.timestamp - otherStats.timestamp)
         );
     }
 
@@ -34,7 +37,18 @@ class CoronaStats {
         this.confirmed = otherStats.confirmed || this.confirmed;
         this.dead = otherStats.dead || this.dead;
         this.recovered = otherStats.recovered || this.recovered;
+        this.timestamp = otherStats.timestamp || this.timestamp;
         return this;
+    }
+
+    serialize() {
+        return JSON.stringify({
+            confirmed: this.confirmed,
+            dead: this.dead,
+            recovered: this.recovered,
+            active: this.getActive(),
+            timestamp: this.timestamp
+        });
     }
 }
 
@@ -64,12 +78,8 @@ class CoronaSource {
     }
 
     cacheStats() {
-        let statsExport = {
-            ...this.current,
-            active: this.current.getActive()
-        };
         try {
-            this.cache.setItem(COOKIE_NAME_LATEST, JSON.stringify(statsExport));
+            this.cache.setItem( COOKIE_NAME_LATEST, statsExport.serialize() );
         } catch (e) {
             console.error(e);
         }

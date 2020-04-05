@@ -1,25 +1,43 @@
 "use strict";
 
-const RAINDROP_SIZE = 14;
-const DRAWING_FREQUENCY = 1000.0 / 30.0;
-
-const COOKIE_NAME_LATEST = "coronaStatsLatest";
-
-var drawRainAnimationFrame = undefined;
-var timestampLastDraw = null;
-var matrix = undefined;
-var context = undefined;
-var screen = window.screen;
 var currentDrawer = undefined;
 
+// Triggered from HTML
+function letTheRainingBegin() {
+    let screen = window.screen;
+    let urlSearchParams = new URLSearchParams(window.location.search);
+
+    let matrix = document.getElementById("matrix");
+    matrix.width = screen.width;
+    matrix.height = screen.height;
+
+    let context = matrix.getContext("2d");
+    currentDrawer = createDrawer( { drawingContext: context, width: screen.width, height: screen.height }, urlSearchParams );
+    currentDrawer.start();
+}
+
+// Triggered from HTML
+function toggleRain() {
+    currentDrawer.toggleDrawing();
+}
+
 class CoronaStatsExported {
-    constructor(exportString) {
+    constructor(confirmed = 0, dead = 0, recovered = 0, active = 0, timestamp = 0) {
+        this.confirmed = confirmed;
+        this.dead = dead;
+        this.recovered = recovered;
+        this.active = active;
+        this.timestamp = timestamp || Date.now();
+    }
+
+    deserialize(exportString) {
         let temp = JSON.parse(exportString);
         try {
             this.confirmed = temp.confirmed;
             this.dead = temp.dead;
             this.recovered = temp.recovered;
             this.active = temp.active;
+            this.timestamp = temp.timestamp;
         } catch(e) {
             console.error(e);
             this.confirmed = 440392;
@@ -31,20 +49,20 @@ class CoronaStatsExported {
 }
 
 class RainDrawer {
-    constructor(drawingContext, view) {
-        this.dataCache = window.localStorage; // Requires CEF flag: --disable-domain-blocking-for-3d-apis
-        this.frequency = DRAWING_FREQUENCY;
-        this.raindropSize = RAINDROP_SIZE;
+    constructor(view, urlSearchParams) {
+        this.frequency = urlSearchParams.get("fps") || ( 5.0);
+        this.period = 1000.0 / this.frequency;
+        this.raindropSize = urlSearchParams.get("size") || 14;
 
-        this.context = drawingContext;
+        this.context = view.drawingContext;
+        this.context.font = `normal normal ${this.raindropSize}pt Monospace`;
+        this.context.textAlign = "center";
+        this.context.textBaseline = "middle";
+
         this.width = view.width;
         this.height = view.height;
         this.timestampLastDraw = 0;
         this.animationFrame = undefined;
-    }
-
-    readCoronaStatsFromCache() {
-        return new CoronaStatsExported(this.dataCache.getItem(COOKIE_NAME_LATEST));
     }
 
     draw(timestamp) {
@@ -57,7 +75,7 @@ class RainDrawer {
     }
 
     shouldDraw(timestamp) {
-        if( (timestamp - this.timestampLastDraw) > this.frequency ) {
+        if( (timestamp - this.timestampLastDraw) > this.period ) {
             return true;
         }
         return false;
@@ -122,19 +140,19 @@ class RainDrawer {
 };
 
 class PixelRainDrawer extends RainDrawer {
-    constructor(drawingContext, view) {
-        super(drawingContext, view);
+    constructor(view, urlSearchParams) {
+        super(view, urlSearchParams);
         this.yPositions = Array( Math.round( this.width / (this.raindropSize - 2) ) ).fill(0);
     }
 
     _drawImplementation() {
-        context.fillStyle = "rgba(0, 0, 0, 0.05)";
-        context.fillRect(0, 0, this.width, this.height);
-        context.fillStyle = "rgba(0, 255, 0, 1.0)";
+        this.context.fillStyle = "rgba(0, 0, 0, 0.05)";
+        this.context.fillRect(0, 0, this.width, this.height);
+        this.context.fillStyle = "rgba(0, 255, 0, 1.0)";
         this.yPositions.map( (y, index) => {
             let text = String.fromCharCode(0x2588);
             let x = (index - 1) * (this.raindropSize - 1);
-            context.fillText(text, x, y);
+            this.context.fillText(text, x, y);
             if( y > ((this.yPositions.length / 2) + Math.random() * 1e4)) {
                 this.yPositions[index] = 0;
             } else {
@@ -145,19 +163,19 @@ class PixelRainDrawer extends RainDrawer {
 };
 
 class RandomRainDrawer extends RainDrawer {
-    constructor(drawingContext, view) {
-        super(drawingContext, view);
+    constructor(view, urlSearchParams) {
+        super(view, urlSearchParams);
         this.yPositions = Array( Math.round( this.width / (this.raindropSize - 2) ) ).fill(0);
     }
 
     _drawImplementation() {
-        context.fillStyle = "rgba(0, 0, 0, 0.05)";
-        context.fillRect(0, 0, this.width, this.height);
-        context.fillStyle = "rgba(0, 255, 0, 1.0)";
+        this.context.fillStyle = "rgba(0, 0, 0, 0.05)";
+        this.context.fillRect(0, 0, this.width, this.height);
+        this.context.fillStyle = "rgba(0, 255, 0, 1.0)";
         this.yPositions.map( (y, index) => {
             let text = this.generateRaindrop();
             let x = (index - 1) * (this.raindropSize - 1);
-            context.fillText(text, x, y);
+            this.context.fillText(text, x, y);
             if( y > ((this.yPositions.length / 2) + Math.random() * 1e4)) {
                 this.yPositions[index] = 0;
             } else {
@@ -168,60 +186,184 @@ class RandomRainDrawer extends RainDrawer {
 };
 
 class CoronaRainDrawer extends RandomRainDrawer {
-    constructor(drawingContext, view, factor) {
-        super(drawingContext, view);
-        this.factor = factor;
+    constructor(view, urlSearchParams) {
+        super(view, urlSearchParams);
+        this.dataCache = window.localStorage; // Requires CEF flag: --disable-domain-blocking-for-3d-apis
+
+        this.factor = urlSearchParams.get("factor") || 0.996;
         this.yPositions = Array( Math.round( this.width / (this.raindropSize - 2) ) ).fill(0);
 
-        this.progress = {
+        const UNKNOWN = 0;  //TODO
+        this.raindropStatus = Array(this.yPositions.length).fill(UNKNOWN);
 
-        };
+        this.statsLatest = new CoronaStatsExported();
+        this.statsDiff = new CoronaStatsExported();
+        this.statsRendered = new CoronaStatsExported();
     }
 
-    generateRaindrop() {
-        if( Math.random() < this.factor ) {
-            return super.generateRaindrop();
-        }
+    _drawImplementation() {
+        this._updateState();    // sadly have to link update and draw, due to rendering whole character
+        this._drawState();      // more (draw) FPS -> more (update) PS -> faster rain drops
+    }
 
+    _updateState() {
+        this.raindropStatus.map( (status, column) => {
+            let row = this.yPositions[column];
+            let shouldDisappear = ( (row*this.raindropSize) > ((this.yPositions.length / 2) + Math.random() * 1e4));
+
+            const DEAD = 4;     //TODO
+            if( shouldDisappear || (status===DEAD) ) {
+                this.resetCoronaRaindrop(column);
+            } else {
+                this.advanceCoronaRaindrop(column);
+            }
+        });
+    }
+
+    isNormalRaindrop(column) {
+        const UNKNOWN = 0;  //TODO
+        return this.raindropStatus[column] === UNKNOWN;
+    }
+    resetCoronaRaindrop(column) {
+        const UNKNOWN = 0;  //TODO
+        this.yPositions[column] = 0;
+        this.raindropStatus[column] = UNKNOWN;
+    }
+    advanceCoronaRaindrop(column) {
+        let row = this.yPositions[column];
+        let status = this.raindropStatus[column];
+
+        this.yPositions[column] = row + 1;
+        this.raindropStatus[column] = this.getNextCoronaRaindropStatus(status);
+    }
+    getNextCoronaRaindropStatus(status) {
+        const UNKNOWN = 0;  //TODO
+        const CONFIRMED = 1;//TODO
+        const ACTIVE = 2;   //TODO
+        const RECOVERED = 3;//TODO
+        const DEAD = 4;     //TODO
+
+        switch(status) {
+            case UNKNOWN:
+                if( this.shouldConfirmCorona() ) {
+                    return CONFIRMED;
+                } else {
+                    return UNKNOWN;
+                }
+            case CONFIRMED: // infected for first time
+                return ACTIVE;
+            case ACTIVE:
+                let latest = this.getStatsLatest();
+                let luckScore = Math.random() * latest.confirmed;
+                if( luckScore < latest.dead ) {
+                    return DEAD;
+                } else
+                if( luckScore < (latest.dead + latest.active) ) {
+                    return ACTIVE;
+                } else {
+                    return RECOVERED;
+                }
+            case RECOVERED:
+                if( this.shouldConfirmCoronaAgain() ) {
+                    return CONFIRMED;
+                } else {
+                    return UNKNOWN;
+                }
+            case DEAD: return UNKNOWN;
+            default: return UNKNOWN;
+        };
+    }
+    shouldConfirmCorona() { return (Math.random() > this.factor); }
+    shouldConfirmCoronaAgain() {
+        let population = 7775613153;
+        let confirmed = this.getStatsLatest().confirmed;
+        return ( Math.random() * population < confirmed );
+    }
+
+    _drawState() {
+        this.context.fillStyle = "rgba(0, 0, 0, 0.05)";
+        this.context.fillRect(0, 0, this.width, this.height);
+        this.raindropStatus.forEach( (status, column) => {
+            this._drawCoronaRaindrop(column, status);
+        });
+    }
+
+    _drawCoronaRaindrop(column, statusCode) {
+        let colorMap = [
+            "rgba(0, 255, 0, 1.0)",
+            "rgba(255, 0, 0, 1.0)",
+            "rgba(0, 255, 0, 1.0)",
+            "rgba(0, 0, 255, 1.0)",
+            "rgba(255, 0, 0, 1.0)"
+        ];
+        let iconGeneratorMap = [
+            super.generateRaindrop,
+            this.getConfirmedIcon,
+            this.getActiveIcon,
+            this.getRecoveredIcon,
+            this.getDeadIcon
+        ];
+        let color = colorMap[statusCode];
+        let icon = iconGeneratorMap[statusCode]();
+        let row = this.yPositions[column];
+        this._drawRaindrop(column, row, color, icon);
+    }
+
+    _drawRaindrop(column, row, style, text) {
+        let x = (column - 1) * (this.raindropSize - 1);
+        let y = row * this.raindropSize;
+        this.context.fillStyle = style;
+        this.context.fillText(text, x, y);
+    }
+
+    readFromCacheCoronaStatsLatest() {
+        const COOKIE_NAME_LATEST = "coronaStatsLatest";
+        this.statsLatest.deserialize(this.dataCache.getItem(COOKIE_NAME_LATEST))
+        return this.statsLatest;
+    }
+
+    readFromCacheCoronaStatsDiff() {
+        const COOKIE_NAME_DIFF = "coronaStatsDiff";
+        this.statsDiff.deserialize(this.dataCache.getItem(COOKIE_NAME_DIFF))
+        return this.statsDiff;
+    }
+
+    getStats() { return this.statsRendered; }
+    getStatsLatest() { return this.readFromCacheCoronaStatsLatest(); }
+    getStatsDiff() { return this.readFromCacheCoronaStatsDiff(); }
+
+    getConfirmedIcon() { return String.fromCharCode(0xD83D, 0xDC51); } //0xD83E, 0xDD34
+    getDeadIcon() { return String.fromCharCode(0xD83D, 0xDC80); }
+    getRecoveredIcon() { return String.fromCharCode(0xD83E, 0xDD73) }
+    getActiveIcon() { return String.fromCharCode(0x2022); } // 0x23F3
+
+
+    generateCoronaRaindrop() {
         let choise = parseInt((Math.random() * 100) % 4);
         switch(choise) {
-            case 0: return this.getConfirmedCount();
-            case 1: return this.getDeadCount();
-            case 2: return this.getRecoveredCount();
-            case 3: return this.getActiveCount();
+            case 0: this.statsRendered.confirmed++; return this.getConfirmedCount();
+            case 1: this.statsRendered.dead++; return this.getDeadCount();
+            case 2: this.statsRendered.recovered++; return this.getRecoveredCount();
+            case 3: this.statsRendered.active++; return this.getActiveCount();
             default: return "X_x";
         }
     }
-
-    getStats() { return this.readCoronaStatsFromCache(); }
-    getConfirmed() { return this.getStats().confirmed; }
-    getDead() { return this.getStats().dead; }
-    getRecovered() { return this.getStats().recovered; }
-    getActive() { return this.getStats().active; }
-
-    getConfirmedIcon() { return String.fromCharCode(0xD83E, 0xDD34); }
-    getDeadIcon() { return String.fromCharCode(0xD83D, 0xDC80); }
-    getRecoveredIcon() { return String.fromCharCode(0xD83E, 0xDD73) }
-    getActiveIcon() { return String.fromCharCode(0x23F3); }
-
-    getConfirmedCount() { return `${this.getConfirmedIcon()}${this.getConfirmed()}`; }
-    getDeadCount() { return `${this.getDeadIcon()}${this.getDead()}`; }
-    getRecoveredCount() { return `${this.getRecoveredIcon()}${this.getRecovered()}`; }
-    getActiveCount() { return `${this.getActiveIcon()}${this.getActive()}`; }
+    getConfirmedCount() { return `${this.getConfirmedIcon()}${this.getStats().confirmed}`; }
+    getDeadCount() { return `${this.getDeadIcon()}${this.getStats().dead}`; }
+    getRecoveredCount() { return `${this.getRecoveredIcon()}${this.getStats().recovered}`; }
+    getActiveCount() { return `${this.getActiveIcon()}${this.getStats().active}`; }
 };
 
-function letTheRainingBegin() {
-    matrix = document.getElementById("matrix");
-    context = matrix.getContext("2d");
-    matrix.width = screen.width;
-    matrix.height = screen.height;
-    context.font = `${RAINDROP_SIZE}pt Monospace`;
+function createDrawer(view, urlSearchParams) {
+    if(!urlSearchParams.has("draw") ) {
+        urlSearchParams.set("draw", "corona");
+    }
 
-    // currentDrawer = new PixelRainDrawer( context, { width: screen.width, height: screen.height } );
-    currentDrawer = new CoronaRainDrawer( context, { width: screen.width, height: screen.height }, 0.996 );
-    currentDrawer.start();
-}
-
-function toggleRain() {
-    currentDrawer.toggleDrawing();
+    let drawerName = urlSearchParams.get("draw");
+    switch(drawerName) {
+        case "corona": return new CoronaRainDrawer( view, urlSearchParams );
+        case "pixel": return new PixelRainDrawer( view, urlSearchParams );
+        case "random": return new RandomRainDrawer( view, urlSearchParams );
+        default: return new RandomRainDrawer( view, urlSearchParams );
+    }
 }
