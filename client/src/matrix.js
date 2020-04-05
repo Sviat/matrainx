@@ -50,7 +50,7 @@ class CoronaStatsExported {
 
 class RainDrawer {
     constructor(view, urlSearchParams) {
-        this.frequency = urlSearchParams.get("fps") || ( 5.0);
+        this.frequency = urlSearchParams.get("fps") || ( 25.0);
         this.period = 1000.0 / this.frequency;
         this.raindropSize = urlSearchParams.get("size") || 14;
 
@@ -191,10 +191,12 @@ class CoronaRainDrawer extends RandomRainDrawer {
         this.dataCache = window.localStorage; // Requires CEF flag: --disable-domain-blocking-for-3d-apis
 
         this.factor = urlSearchParams.get("factor") || 0.996;
+        this.totalPopulation = urlSearchParams.get("pop") || 7775613153;
         this.yPositions = Array( Math.round( this.width / (this.raindropSize - 2) ) ).fill(0);
 
         const UNKNOWN = 0;  //TODO
         this.raindropStatus = Array(this.yPositions.length).fill(UNKNOWN);
+        this.raindropQueue = Array(this.yPositions.length).fill([]);
 
         this.statsLatest = new CoronaStatsExported();
         this.statsDiff = new CoronaStatsExported();
@@ -208,11 +210,23 @@ class CoronaRainDrawer extends RandomRainDrawer {
 
     _updateState() {
         this.raindropStatus.map( (status, column) => {
-            let row = this.yPositions[column];
-            let shouldDisappear = ( (row*this.raindropSize) > ((this.yPositions.length / 2) + Math.random() * 1e4));
+            if( this.raindropQueue[column].length ) {
+                return;
+            }
 
+            const PAUSED = -1;  //TODO
             const DEAD = 4;     //TODO
-            if( shouldDisappear || (status===DEAD) ) {
+            const DELAYED = 5;  //TODO
+
+
+            let row = this.yPositions[column];
+
+            let isBelowThreshold = ( (row*this.raindropSize) > ((this.yPositions.length / 2) + Math.random() * 1e4));
+            let isDead = (status === DEAD);
+            let isWaiting = ( (status <= PAUSED) || (status >= DELAYED) );
+            let shouldDisappear = (isBelowThreshold || isDead) && (!isWaiting);
+
+            if( shouldDisappear ) {
                 this.resetCoronaRaindrop(column);
             } else {
                 this.advanceCoronaRaindrop(column);
@@ -230,18 +244,47 @@ class CoronaRainDrawer extends RandomRainDrawer {
         this.raindropStatus[column] = UNKNOWN;
     }
     advanceCoronaRaindrop(column) {
-        let row = this.yPositions[column];
+        const UNKNOWN = 0;  //TODO
+        const RECOVERED = 3;//TODO
+        const DEAD = 4;     //TODO
+
+        function pauseNeighbors(that, column) {
+            const DELAY = -5; // TODO
+            function pauseLane(that, c) {
+                if( (that.raindropStatus >= UNKNOWN)
+                 && (that.raindropStatus <= RECOVERED) ) {
+                    that.raindropStatus[c] = DELAY;
+                }
+            }
+            if( (column > 0) ) {
+                pauseLane(that, column-1);
+            }
+            if( (column < (that.raindropStatus.length-1) ) ) {
+                pauseLane(that, column+1);
+            }
+        }
         let status = this.raindropStatus[column];
 
-        this.yPositions[column] = row + 1;
         this.raindropStatus[column] = this.getNextCoronaRaindropStatus(status);
+        if( this.raindropStatus[column] === RECOVERED ) {
+            this.addSymbolsToRenderingQueue(column, this.getRecoveredIcon());
+            this.addNumberToRenderingQueue(column, this.getStatsLatest().recovered);
+            pauseNeighbors(this, column);
+        } else
+        if( this.raindropStatus[column] === DEAD ) {
+            this.addSymbolsToRenderingQueue(column, this.getDeadIcon());
+            this.addNumberToRenderingQueue(column, this.getStatsLatest().dead);
+            pauseNeighbors(this, column);
+        }
     }
     getNextCoronaRaindropStatus(status) {
+        const PAUSED = -1;  //TODO
         const UNKNOWN = 0;  //TODO
         const CONFIRMED = 1;//TODO
         const ACTIVE = 2;   //TODO
         const RECOVERED = 3;//TODO
         const DEAD = 4;     //TODO
+        const DELAYED = 5;  //TODO
 
         switch(status) {
             case UNKNOWN:
@@ -250,7 +293,7 @@ class CoronaRainDrawer extends RandomRainDrawer {
                 } else {
                     return UNKNOWN;
                 }
-            case CONFIRMED: // infected for first time
+            case CONFIRMED:
                 return ACTIVE;
             case ACTIVE:
                 let latest = this.getStatsLatest();
@@ -265,20 +308,31 @@ class CoronaRainDrawer extends RandomRainDrawer {
                 }
             case RECOVERED:
                 if( this.shouldConfirmCoronaAgain() ) {
-                    return CONFIRMED;
+                    return CONFIRMED; // reinfected, oops
                 } else {
                     return UNKNOWN;
                 }
-            case DEAD: return UNKNOWN;
-            default: return UNKNOWN;
+            case DEAD:
+                return UNKNOWN;
+            default:
+                // shrink back towards [0:5] range
+                if( status <= PAUSED ) {
+                    return status+1;
+                } else
+                if( status >= DELAYED ) {
+                    return status-1;
+                } else {
+                    return UNKNOWN;
+                }
         };
     }
-    shouldConfirmCorona() { return (Math.random() > this.factor); }
-    shouldConfirmCoronaAgain() {
-        let population = 7775613153;
+
+    shouldConfirmCorona() {
+        let population = this.getTotalPopulation();
         let confirmed = this.getStatsLatest().confirmed;
         return ( Math.random() * population < confirmed );
     }
+    shouldConfirmCoronaAgain() { return (Math.random() > this.factor); }
 
     _drawState() {
         this.context.fillStyle = "rgba(0, 0, 0, 0.05)";
@@ -289,14 +343,14 @@ class CoronaRainDrawer extends RandomRainDrawer {
     }
 
     _drawCoronaRaindrop(column, statusCode) {
-        let colorMap = [
+        const colorMap = [
             "rgba(0, 255, 0, 1.0)",
             "rgba(255, 0, 0, 1.0)",
             "rgba(0, 255, 0, 1.0)",
-            "rgba(0, 0, 255, 1.0)",
-            "rgba(255, 0, 0, 1.0)"
+            "hsla(070, 070%, 055%, 1.0)",
+            "hsla(016, 100%, 042%, 1.0)"
         ];
-        let iconGeneratorMap = [
+        const iconGeneratorMap = [
             super.generateRaindrop,
             this.getConfirmedIcon,
             this.getActiveIcon,
@@ -304,9 +358,41 @@ class CoronaRainDrawer extends RandomRainDrawer {
             this.getDeadIcon
         ];
         let color = colorMap[statusCode];
-        let icon = iconGeneratorMap[statusCode]();
+        let icon = "";
+        if( this.raindropQueue[column].length ) {
+            icon = this.raindropQueue[column].shift();
+        } else {
+            icon = iconGeneratorMap[statusCode]()
+        }
         let row = this.yPositions[column];
         this._drawRaindrop(column, row, color, icon);
+    }
+
+    addNumberToRenderingQueue(column, value) {
+        let digitString = value.toString().split('');
+        let pseudoDigitString = [];
+        digitString.map( (value, index) => {
+            pseudoDigitString.push(" ");
+            pseudoDigitString.push(value);
+            // switch(value) {
+            //     case "0": pseudoDigitString.push(String.fromCharCode(0x24FF)); break;
+            //     case "1": pseudoDigitString.push(String.fromCharCode(0x2460)); break;
+            //     case "2": pseudoDigitString.push(String.fromCharCode(0x2461)); break;
+            //     case "3": pseudoDigitString.push(String.fromCharCode(0x2462)); break;
+            //     case "4": pseudoDigitString.push(String.fromCharCode(0x2463)); break;
+            //     case "5": pseudoDigitString.push(String.fromCharCode(0x2464)); break;
+            //     case "6": pseudoDigitString.push(String.fromCharCode(0x2465)); break;
+            //     case "7": pseudoDigitString.push(String.fromCharCode(0x2466)); break;
+            //     case "8": pseudoDigitString.push(String.fromCharCode(0x2467)); break;
+            //     case "9": pseudoDigitString.push(String.fromCharCode(0x2468)); break;
+            // }
+        });
+        pseudoDigitString.push(" ");
+        this.addSymbolsToRenderingQueue(column, pseudoDigitString);
+    }
+
+    addSymbolsToRenderingQueue(column, symbols) {
+        this.raindropQueue[column] = this.raindropQueue[column].concat(symbols);
     }
 
     _drawRaindrop(column, row, style, text) {
@@ -314,6 +400,8 @@ class CoronaRainDrawer extends RandomRainDrawer {
         let y = row * this.raindropSize;
         this.context.fillStyle = style;
         this.context.fillText(text, x, y);
+
+        this.yPositions[column] = row + 1;
     }
 
     readFromCacheCoronaStatsLatest() {
@@ -328,6 +416,7 @@ class CoronaRainDrawer extends RandomRainDrawer {
         return this.statsDiff;
     }
 
+    getTotalPopulation() { return this.totalPopulation; }
     getStats() { return this.statsRendered; }
     getStatsLatest() { return this.readFromCacheCoronaStatsLatest(); }
     getStatsDiff() { return this.readFromCacheCoronaStatsDiff(); }
