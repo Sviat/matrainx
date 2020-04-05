@@ -344,11 +344,11 @@ class CoronaRainDrawer extends RandomRainDrawer {
 
     _drawCoronaRaindrop(column, statusCode) {
         const colorMap = [
-            "rgba(0, 255, 0, 1.0)",
-            "rgba(255, 0, 0, 1.0)",
-            "rgba(0, 255, 0, 1.0)",
+            "hsla(120, 100%, 050%, 1.0)",
+            "hsla(120, 100%, 050%, 1.0)",
+            "hsla(120, 100%, 050%, 1.0)",
             "hsla(070, 070%, 055%, 1.0)",
-            "hsla(016, 100%, 042%, 1.0)"
+            "hsla(000, 100%, 050%, 1.0)"
         ];
         const iconGeneratorMap = [
             super.generateRaindrop,
