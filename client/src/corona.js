@@ -94,11 +94,13 @@ class ArcgisCoronaSource extends CoronaSource {
         this.endpoint = {
             "confirmed": "https://services1.arcgis.com/0MSEUqKaxRlEPj5g/arcgis/rest/services/ncov_cases/FeatureServer/1/query?f=json&where=Confirmed%20%3E%200&returnGeometry=false&spatialRel=esriSpatialRelIntersects&outFields=*&outStatistics=%5B%7B%22statisticType%22%3A%22sum%22%2C%22onStatisticField%22%3A%22Confirmed%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D&outSR=102100&cacheHint=true",
             "dead": "https://services1.arcgis.com/0MSEUqKaxRlEPj5g/arcgis/rest/services/ncov_cases/FeatureServer/1/query?f=json&where=Confirmed%20%3E%200&returnGeometry=false&spatialRel=esriSpatialRelIntersects&outFields=*&outStatistics=%5B%7B%22statisticType%22%3A%22sum%22%2C%22onStatisticField%22%3A%22Deaths%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D&outSR=102100&cacheHint=true",
-            "recovered": "https://services1.arcgis.com/0MSEUqKaxRlEPj5g/arcgis/rest/services/ncov_cases/FeatureServer/1/query?f=json&where=Confirmed%20%3E%200&returnGeometry=false&spatialRel=esriSpatialRelIntersects&outFields=*&outStatistics=%5B%7B%22statisticType%22%3A%22sum%22%2C%22onStatisticField%22%3A%22Recovered%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D&outSR=102100&cacheHint=true"
+            "recovered": "https://services1.arcgis.com/0MSEUqKaxRlEPj5g/arcgis/rest/services/ncov_cases/FeatureServer/1/query?f=json&where=Confirmed%20%3E%200&returnGeometry=false&spatialRel=esriSpatialRelIntersects&outFields=*&outStatistics=%5B%7B%22statisticType%22%3A%22sum%22%2C%22onStatisticField%22%3A%22Recovered%22%2C%22outStatisticFieldName%22%3A%22value%22%7D%5D&outSR=102100&cacheHint=true",
+            "combined": "https://services1.arcgis.com/0MSEUqKaxRlEPj5g/arcgis/rest/services/ncov_cases/FeatureServer/1/query?f=json&where=Confirmed%20%3E%200&returnGeometry=false&spatialRel=esriSpatialRelIntersects&outFields=*&outStatistics=[{%22statisticType%22:%22sum%22,%22onStatisticField%22:%22Confirmed%22,%22outStatisticFieldName%22:%22confirmed%22},{%22statisticType%22:%22sum%22,%22onStatisticField%22:%22Recovered%22,%22outStatisticFieldName%22:%22recovered%22},{%22statisticType%22:%22sum%22,%22onStatisticField%22:%22Deaths%22,%22outStatisticFieldName%22:%22dead%22}]&outSR=102100&cacheHint=true"
         };
     }
 
     _requestValue(url, callback) {
+        // KILLME: DEPRECATED
         $.getJSON(url).done(function (data) {
             function responseHasValue(response) {
                 return response && response.features
@@ -124,7 +126,43 @@ class ArcgisCoronaSource extends CoronaSource {
         });
     }
 
+    _requestStats(url, callback) {
+        $.getJSON(url).done(function (data) {
+            function responseHasStats(response) {
+                return response && response.features
+                    && response.features[0].attributes
+                    && ( ("confirmed" in response.features[0].attributes)
+                       ||("recovered" in response.features[0].attributes)
+                       ||("dead"      in response.features[0].attributes) );
+            }
+            function responseGetStats(response) {
+                function responseGetValue(field) {
+                    return parseInt(response.features[0].attributes[field]);
+                }
+                return new CoronaStats(
+                    responseGetValue("confirmed"),
+                    responseGetValue("dead"),
+                    responseGetValue("recovered")
+                );
+            }
+
+            let stats = undefined;
+            try {
+                if( responseHasStats(data) ) {
+                    stats = responseGetStats(data);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            callback(stats);
+        }).fail(function (jqxhr, textStatus, error) {
+            var err = textStatus + ", " + error;
+            console.error(`Request Failed: ${err}`);
+        });
+    }
+
     _updateConfirmed(callback) {
+        // KILLME: DEPRECATED
         this.previous.confirmed = this.current.confirmed;
         this._requestValue(this.endpoint.confirmed, (value) => {
             if( value ) {
@@ -137,6 +175,7 @@ class ArcgisCoronaSource extends CoronaSource {
     }
 
     _updateDead(callback) {
+        // KILLME: DEPRECATED
         this.previous.dead = this.current.dead;
         this._requestValue(this.endpoint.dead, (value) => {
             if( value ) {
@@ -149,6 +188,7 @@ class ArcgisCoronaSource extends CoronaSource {
     }
 
     _updateRecovered(callback) {
+        // KILLME: DEPRECATED
         this.previous.recovered = this.current.recovered;
         this._requestValue(this.endpoint.recovered, (value) => {
             if( value ) {
@@ -160,7 +200,8 @@ class ArcgisCoronaSource extends CoronaSource {
         });
     }
 
-    update(renderCb = undefined) {
+    updateOneByOne(renderCb = undefined) {
+        // KILLME: DEPRECATED
         function updateAndRenderCallback() {
             this.updateDiff();
             this.cacheStats();
@@ -173,6 +214,27 @@ class ArcgisCoronaSource extends CoronaSource {
         this._updateConfirmed(updateAndRenderCallback.bind(this));
         this._updateDead(updateAndRenderCallback.bind(this));
         this._updateRecovered(updateAndRenderCallback.bind(this));
+    }
+
+    updateStats(newData) {
+        this.previous = this.current;
+        this.current = newData
+        this.lastDiff.updateWith(this.current.getDiff(this.previous));
+        return this.lastDiff;
+    }
+
+    update(renderCb = undefined) {
+        this._requestStats(this.endpoint.combined, (stats) => {
+            if(!stats ) {
+                return;
+            }
+
+            this.updateStats(stats);
+            this.cacheStats();
+            if( renderCb ) {
+                renderCb(this.current, this.lastDiff);
+            }
+        });
     }
 }
 
@@ -244,21 +306,26 @@ class CoronaView {
 
     draw(currentStats, differenceStats) {
         this.drawStats(currentStats, this.spanCurrentConfirmed, this.spanCurrentDead, this.spanCurrentRecovered, this.spanCurrentActive);
-        this.drawStats(differenceStats, this.spanDiffConfirmed, this.spanDiffDead, this.spanDiffRecovered, this.spanDiffActive);
+        this.drawStats(differenceStats, this.spanDiffConfirmed, this.spanDiffDead, this.spanDiffRecovered, this.spanDiffActive, true);
     }
 
-    drawStats(stats, spanConfirmed, spanDead, spanRecovered, spanActive) {
-        let numberFormat = new NumberFormat(stats.confirmed);
+    drawStats(stats, spanConfirmed, spanDead, spanRecovered, spanActive, forceDrawSign = false) {
+        let numberFormat = new NumberFormat(42);
         numberFormat.setPlaces(0);
         numberFormat.setSeparators(true, ".", ",");
 
-        spanConfirmed.innerHTML = numberFormat.toFormatted();
-        numberFormat.setNumber(stats.dead);
-        spanDead.innerHTML = numberFormat.toFormatted();
-        numberFormat.setNumber(stats.recovered);
-        spanRecovered.innerHTML = numberFormat.toFormatted();
-        numberFormat.setNumber(stats.getActive());
-        spanActive.innerHTML = numberFormat.toFormatted();
+        function drawStat(span, value, formatter) {
+            formatter.setNumber(value);
+            let formattedValue = formatter.toFormatted();
+            if (forceDrawSign && (value > 0) ) {
+                formattedValue = "+"+formattedValue;
+            }
+            span.innerHTML = formattedValue;
+        }
+        drawStat(spanConfirmed, stats.confirmed, numberFormat);
+        drawStat(spanDead, stats.dead, numberFormat);
+        drawStat(spanRecovered, stats.recovered, numberFormat);
+        drawStat(spanActive, stats.getActive(), numberFormat);
     }
 }
 

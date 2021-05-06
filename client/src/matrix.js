@@ -2,10 +2,26 @@
 
 var currentDrawer = undefined;
 
-// Triggered from HTML
+// -- HTML API -- //
 function letTheRainingBegin() {
-    let screen = window.screen;
     let urlSearchParams = new URLSearchParams(window.location.search);
+    urlSearchParams.set("draw", "random");
+    createScene(urlSearchParams);
+}
+
+function letTheVirusBegin() {
+    let urlSearchParams = new URLSearchParams(window.location.search);
+    urlSearchParams.set("draw", "corona");
+    createScene(urlSearchParams);
+}
+
+function toggleRain() {
+    currentDrawer.toggleDrawing();
+}
+// --    --    -- //
+
+function createScene(urlSearchParams) {
+    let screen = window.screen;
 
     let matrix = document.getElementById("matrix");
     matrix.width = screen.width;
@@ -14,11 +30,6 @@ function letTheRainingBegin() {
     let context = matrix.getContext("2d");
     currentDrawer = createDrawer( { drawingContext: context, width: screen.width, height: screen.height }, urlSearchParams );
     currentDrawer.start();
-}
-
-// Triggered from HTML
-function toggleRain() {
-    currentDrawer.toggleDrawing();
 }
 
 class CoronaStatsExported {
@@ -52,7 +63,7 @@ class RainDrawer {
     constructor(view, urlSearchParams) {
         this.frequency = urlSearchParams.get("fps") || ( 25.0);
         this.period = 1000.0 / this.frequency;
-        this.raindropSize = urlSearchParams.get("size") || 14;
+        this.raindropSize = urlSearchParams.get("size") || 12;
 
         this.context = view.drawingContext;
         this.context.font = `normal normal ${this.raindropSize}pt Monospace`;
