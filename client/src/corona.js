@@ -320,6 +320,9 @@ class CoronaView {
             if (forceDrawSign && (value > 0) ) {
                 formattedValue = "+"+formattedValue;
             }
+            if (value === 0) {
+                formattedValue = "&nbsp;";
+            }
             span.innerHTML = formattedValue;
         }
         drawStat(spanConfirmed, stats.confirmed, numberFormat);
