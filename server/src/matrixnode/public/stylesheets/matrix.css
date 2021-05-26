@@ -1,0 +1,12 @@
+body {
+    margin:0;
+    padding:0;
+}
+
+#matrix {
+    position: absolute;
+    overflow: hidden;
+    bottom: 0;
+    width: 100%;
+    z-index: 41;
+}

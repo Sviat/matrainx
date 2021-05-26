@@ -1,0 +1,50 @@
+.displayContainer{
+    font-family: sans-serif;
+    position: absolute;
+    bottom: 0;
+    right: 0px;
+    display: inline-block;
+    font-weight: 100;
+    text-align: center;
+    font-size: 24px;
+    z-index: 42;
+}
+
+.displayContainer > .counter{
+    padding: 2px 3px 2px 3px;
+    border-radius: 3px;
+    background: rgba(0, 172, 0, 0.0);
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.displayContainer .counter > span{
+    padding: 2px 15px 2px 15px;
+    border-radius: 3px;
+    color: #000;
+    background: #00FF00;
+    display: inline-block;
+}
+
+.displayContainer > .diff{
+    margin-left: -16px;
+    margin-right: 8px;
+    border-radius: 3px;
+    background: #b41b93;
+    display: inline;
+    vertical-align: top;
+}
+
+.displayContainer .diff > span{
+    padding: 1px 1px 1px 1px;
+    border-radius: 1px;
+    color: #000;
+    display: inline;
+    vertical-align: top;
+}
+
+.smalltext{
+    color: #00FF00;
+    padding-top: 5px;
+    font-size: 12px;
+}
